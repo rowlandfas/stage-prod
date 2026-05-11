@@ -1,0 +1,31 @@
+variable "all-cidr" {}
+variable "httpport" {}
+variable "httpsport" {}
+variable "sshport" {}
+variable "sonarport" {}
+variable "dockerport" {}
+
+variable "jenkinsport" {}
+variable "otlpport" {}
+variable "nexusport" {}
+variable "mysqlport" {}
+variable "redhat_ami" {}
+variable "ubuntu_ami" {}
+variable "instance_type" {}
+variable "cidr" {}
+variable "public_subnet_1" {}
+variable "public_subnet_2" {}
+variable "private_subnet_1" {}
+variable "private_subnet_2" {}
+variable "dbusername" {}
+variable "db-identifier" {}
+variable "dbname" {}
+variable "domain" {}
+variable "newrelicfile" {
+  default = "./newrelic.yml"
+}
+variable "jenkins-domain" {}
+variable "sonar-domain" {}
+variable "nexus-domain" {}
+variable "docker-domain" {}
+variable "stage-domain" {}
