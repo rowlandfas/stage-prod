@@ -440,7 +440,7 @@ resource "aws_instance" "baston-server" {
   subnet_id                   = aws_subnet.pub_sub1.id
   user_data                   = <<-EOF
   #!/bin/bash 
-  echo "{tls_private_key.key.private_key_pem}" >> /home/ec2-user/.ssh/id.rsa
+  echo "${tls_private_key.key.private_key_pem}" >> /home/ec2-user/.ssh/id.rsa
   sudo chmod 400 /home/ec2-user/.ssh/id.rsa 
   sudo chown ec2-user:ec2-user /home/ec2-user/.ssh/id.rsa
   sudo yum install mysql -y
