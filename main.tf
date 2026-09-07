@@ -126,8 +126,8 @@ resource "aws_route_table" "pub-rt" {
 resource "aws_route_table" "pri-rt" {
   vpc_id = aws_vpc.vpc.id
   route {
-    cidr_block = var.all-cidr
-    gateway_id = aws_nat_gateway.nat-gw.id
+    cidr_block     = var.all-cidr
+    nat_gateway_id = aws_nat_gateway.nat-gw.id
   }
   tags = {
     Name = "${local.name}-pri-rt"
@@ -377,6 +377,14 @@ resource "aws_security_group" "nexus-sg" {
   }
 
   ingress {
+    description = "nexus-docker-registry"
+    protocol    = "tcp"
+    from_port   = var.nexusdockerport
+    to_port     = var.nexusdockerport
+    cidr_blocks = [var.all-cidr]
+  }
+
+  ingress {
     description = "http-port"
     protocol    = "tcp"
     from_port   = var.httpport
@@ -479,6 +487,8 @@ resource "aws_instance" "ansible-server" {
   subnet_id                   = aws_subnet.pub_sub2.id
   key_name                    = aws_key_pair.key.id
   user_data                   = local.ansible_user_data
+  # inventory + deploy playbooks live in user_data; recreate so edits actually land
+  user_data_replace_on_change = true
   metadata_options {
     http_tokens = "required"
   }
@@ -530,6 +540,7 @@ resource "aws_instance" "Jenkins" {
   subnet_id                   = aws_subnet.pub_sub1.id
   key_name                    = aws_key_pair.key.id
   user_data                   = local.jenkins_user_data
+  user_data_replace_on_change = true
   metadata_options {
     http_tokens = "required"
   }
@@ -561,14 +572,16 @@ resource "aws_secretsmanager_secret" "mysql-secret" {
   recovery_window_in_days = 0
 }
 
-data "aws_secretsmanager_random_password" "db-password" {
-  password_length     = 10
-  exclude_punctuation = true
+# Stable random password (a resource, not a data source, so it is generated once
+# and stored in state instead of being regenerated on every plan/apply)
+resource "random_password" "db-password" {
+  length  = 16
+  special = false
 }
 
 resource "aws_secretsmanager_secret_version" "dbase-secret" {
   secret_id     = aws_secretsmanager_secret.mysql-secret.id
-  secret_string = data.aws_secretsmanager_random_password.db-password.random_password
+  secret_string = random_password.db-password.result
 }
 
 //creating subnet group 
@@ -649,6 +662,10 @@ resource "aws_autoscaling_group" "asg_group" {
     propagate_at_launch = true
   }
 
+  # desired_capacity is owned by the target-tracking policy at runtime
+  lifecycle {
+    ignore_changes = [desired_capacity]
+  }
 }
 
 # creating autoscaling policy
@@ -707,6 +724,16 @@ resource "aws_elb" "elb-nexus1" {
     instance_port      = 8081
     instance_protocol  = "http"
     lb_port            = 443
+    lb_protocol        = "https"
+    ssl_certificate_id = aws_acm_certificate.ssl-cert.arn
+  }
+
+  # Nexus Docker (hosted) registry connector - terminate TLS at the ELB,
+  # forward plain HTTP to the Nexus docker connector on the same port.
+  listener {
+    instance_port      = var.nexusdockerport
+    instance_protocol  = "http"
+    lb_port            = var.nexusdockerport
     lb_protocol        = "https"
     ssl_certificate_id = aws_acm_certificate.ssl-cert.arn
   }

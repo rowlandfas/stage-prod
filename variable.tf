@@ -26,6 +26,9 @@ variable "otlpport" {
 variable "nexusport" {
   default = 8081
 }
+variable "nexusdockerport" {
+  default = 8082
+}
 variable "mysqlport" {
   default = 3306
 }

@@ -2,19 +2,62 @@ locals {
   jenkins_user_data = <<-EOF
 #!/bin/bash
 sudo yum update -y
-sudo yum install wget -y
-sudo yum install maven -y
-sudo yum install git -y
+sudo yum install -y wget git
+
+# Jenkins LTS requires Java 17+; install Java 21 and make it the system default
+sudo yum install -y java-21-openjdk java-21-openjdk-devel
+JAVA21_BIN=$(rpm -ql java-21-openjdk-headless | grep -m1 '/bin/java$')
+JAVA21_HOME=$(dirname "$(dirname "$JAVA21_BIN")")
+sudo alternatives --set java "$JAVA21_BIN" || true
+
+# Maven installed after the JDK so it runs on Java 21 (it may still pull an older
+# headless JDK as an rpm dependency, which is why we pin Jenkins to Java 21 below)
+sudo yum install -y maven
+
 sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
 sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 sudo yum upgrade -y
-sudo yum install java-17-openjdk -y
-sudo yum install jenkins -y
+sudo yum install -y jenkins
+
 sudo sed -i 's/^User=jenkins/User=root/' /usr/lib/systemd/system/jenkins.service
+
+# Pin the Jenkins service to the Java 21 runtime regardless of the default alternative
+sudo mkdir -p /etc/systemd/system/jenkins.service.d
+printf '[Service]\nEnvironment="JAVA_HOME=%s"\nEnvironment="JENKINS_JAVA_CMD=%s"\n' "$JAVA21_HOME" "$JAVA21_BIN" | sudo tee /etc/systemd/system/jenkins.service.d/java.conf
+
+# Pre-install the plugins the bankapp pipeline needs so a rebuild comes up ready.
+# config-file-provider is the one that was missing (configFileProvider/configFile step);
+# the rest match what the Jenkinsfile uses (Sonar, Nexus upload, OWASP, Docker, Slack, ssh-agent).
+PLUGIN_MGR_VERSION=2.13.2 # bump if the download 404s
+sudo curl -fsSL -o /opt/jenkins-plugin-manager.jar \
+  "https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/$PLUGIN_MGR_VERSION/jenkins-plugin-manager-$PLUGIN_MGR_VERSION.jar"
+sudo mkdir -p /var/lib/jenkins/plugins
+cat << 'EOT' | sudo tee /var/lib/jenkins/plugins.txt
+config-file-provider
+pipeline-utility-steps
+workflow-aggregator
+git
+credentials-binding
+ssh-agent
+sonar
+nexus-artifact-uploader
+dependency-check-jenkins-plugin
+docker-workflow
+docker-commons
+htmlpublisher
+slack
+timestamps
+ws-cleanup
+EOT
+sudo "$JAVA21_BIN" -jar /opt/jenkins-plugin-manager.jar \
+  --war /usr/share/java/jenkins.war \
+  --plugin-file /var/lib/jenkins/plugins.txt \
+  --plugin-download-directory /var/lib/jenkins/plugins \
+  --latest true
+sudo chown -R jenkins:jenkins /var/lib/jenkins/plugins
+
 sudo systemctl daemon-reload
-sudo systemctl start jenkins
-sudo systemctl enable jenkins
-sudo systemctl start jenkins
+sudo systemctl enable --now jenkins
 # Install trivy for container scanning
 RELEASE_VERSION=$(grep -Po '(?<=VERSION_ID=")[0-9]' /etc/os-release)
 cat << EOT | sudo tee -a /etc/yum.repos.d/trivy.repo

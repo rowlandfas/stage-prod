@@ -23,9 +23,15 @@ ansible_ssh_common_args='-o UserKnownHostsFile=/dev/null -o StrictHostKeyCheckin
 
 localhost ansible_connection=local
 
-[docker_host]
+[stage]
 ${aws_instance.stage_Docker.private_ip} ansible_user=ec2-user ansible_ssh_private_key_file=/home/ec2-user/.ssh/id_rsa
+
+[prod]
 ${aws_instance.prod_Docker.private_ip} ansible_user=ec2-user ansible_ssh_private_key_file=/home/ec2-user/.ssh/id_rsa
+
+[docker_host:children]
+stage
+prod
 
 EOT
 sudo mkdir /opt/docker
@@ -83,45 +89,74 @@ cat <<EOT>> /opt/docker/docker-image.yml
         state: absent
 EOT
 
-touch /opt/docker/docker-container.yml
-cat <<EOT>> /opt/docker/docker-container.yml
+# deploy-stage.yml / deploy-prod.yml: pull the image the Jenkins pipeline pushed
+# to the Nexus Docker registry and (re)run the container. Jenkins passes
+#   -e image_ref=<registry>/<name>:<tag> -e registry=<registry> \
+#   -e nexus_user=<user> -e nexus_pass=<pass>
+touch /opt/docker/deploy-stage.yml
+cat <<EOT> /opt/docker/deploy-stage.yml
 ---
- - hosts: docker_host
+ - hosts: stage
    become: true
+   vars:
+     registry: "{{ registry | default('nexus.everythingops.io:8082') }}"
+     image_ref: "{{ image_ref | default(registry + '/bankapp:latest') }}"
+     nexus_user: "{{ nexus_user | default('admin') }}"
+     nexus_pass: "{{ nexus_pass | default('admin123') }}"
    tasks:
-    - name: Login to Docker Hub
-      docker_login:
-        username: cloudhight
-        password: Motiva123@
-    - name: Stop any container running
-      docker_container:
-        name: bankappContainer
-        state: stopped
+    - name: Log in to the Nexus Docker registry
+      command: "docker login {{ registry }} -u {{ nexus_user }} -p {{ nexus_pass }}"
+      no_log: true
+    - name: Pull the application image
+      command: "docker pull {{ image_ref }}"
+    - name: Remove the previous container
+      command: "docker rm -f bankapp"
       ignore_errors: yes
-    - name: Remove stopped container
-      docker_container:
-        name: bankappContainer
-        state: absent
+    - name: Start the new container
+      command: >
+        docker run -d --name bankapp --restart unless-stopped
+        -p 8080:8080 {{ image_ref }}
+    - name: Wait for the app to answer on 8080
+      uri:
+        url: "http://localhost:8080/login"
+        status_code: [200, 302, 401]
+      register: health
+      retries: 15
+      delay: 8
+      until: health is success
+EOT
+
+touch /opt/docker/deploy-prod.yml
+cat <<EOT> /opt/docker/deploy-prod.yml
+---
+ - hosts: prod
+   become: true
+   vars:
+     registry: "{{ registry | default('nexus.everythingops.io:8082') }}"
+     image_ref: "{{ image_ref | default(registry + '/bankapp:latest') }}"
+     nexus_user: "{{ nexus_user | default('admin') }}"
+     nexus_pass: "{{ nexus_pass | default('admin123') }}"
+   tasks:
+    - name: Log in to the Nexus Docker registry
+      command: "docker login {{ registry }} -u {{ nexus_user }} -p {{ nexus_pass }}"
+      no_log: true
+    - name: Pull the application image
+      command: "docker pull {{ image_ref }}"
+    - name: Remove the previous container
+      command: "docker rm -f bankapp"
       ignore_errors: yes
-    - name: Remove docker image
-      docker_image:
-        state: absent
-        name: cloudhight/bankapp
-        tag: latest
-      ignore_errors: yes
-    - name: Pull docker image from Docker Hub
-      docker_image:
-        name: cloudhight/bankapp
-        tag: latest
-        source: pull
-    - name: Create container from bankapp image
-      docker_container:
-        name: bankappContainer
-        image: cloudhight/bankapp
-        state: started
-        ports:
-          - "8080:8080"
-        detach: true
+    - name: Start the new container
+      command: >
+        docker run -d --name bankapp --restart unless-stopped
+        -p 8080:8080 {{ image_ref }}
+    - name: Wait for the app to answer on 8080
+      uri:
+        url: "http://localhost:8080/login"
+        status_code: [200, 302, 401]
+      register: health
+      retries: 15
+      delay: 8
+      until: health is success
 EOT
 
 touch /opt/docker/newrelic-container.yml
