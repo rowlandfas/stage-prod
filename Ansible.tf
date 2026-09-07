@@ -103,18 +103,31 @@ cat <<EOT> /opt/docker/deploy-stage.yml
      image_ref: "{{ image_ref | default(registry + '/bankapp:latest') }}"
      nexus_user: "{{ nexus_user | default('admin') }}"
      nexus_pass: "{{ nexus_pass | default('admin123') }}"
+     db_url: "{{ db_url | default('') }}"
+     db_user: "{{ db_user | default('') }}"
+     db_pass: "{{ db_pass | default('') }}"
    tasks:
     - name: Log in to the Nexus Docker registry
       command: "docker login {{ registry }} -u {{ nexus_user }} -p {{ nexus_pass }}"
       no_log: true
     - name: Pull the application image
       command: "docker pull {{ image_ref }}"
+    - name: Render the container env file
+      copy:
+        dest: /opt/bankapp.env
+        mode: "0600"
+        content: |
+          SPRING_DATASOURCE_URL={{ db_url }}
+          SPRING_DATASOURCE_USERNAME={{ db_user }}
+          SPRING_DATASOURCE_PASSWORD={{ db_pass }}
+      no_log: true
     - name: Remove the previous container
       command: "docker rm -f bankapp"
       ignore_errors: yes
     - name: Start the new container
       command: >
         docker run -d --name bankapp --restart unless-stopped
+        --env-file /opt/bankapp.env
         -p 8080:8080 {{ image_ref }}
     - name: Wait for the app to answer on 8080
       uri:
@@ -136,18 +149,31 @@ cat <<EOT> /opt/docker/deploy-prod.yml
      image_ref: "{{ image_ref | default(registry + '/bankapp:latest') }}"
      nexus_user: "{{ nexus_user | default('admin') }}"
      nexus_pass: "{{ nexus_pass | default('admin123') }}"
+     db_url: "{{ db_url | default('') }}"
+     db_user: "{{ db_user | default('') }}"
+     db_pass: "{{ db_pass | default('') }}"
    tasks:
     - name: Log in to the Nexus Docker registry
       command: "docker login {{ registry }} -u {{ nexus_user }} -p {{ nexus_pass }}"
       no_log: true
     - name: Pull the application image
       command: "docker pull {{ image_ref }}"
+    - name: Render the container env file
+      copy:
+        dest: /opt/bankapp.env
+        mode: "0600"
+        content: |
+          SPRING_DATASOURCE_URL={{ db_url }}
+          SPRING_DATASOURCE_USERNAME={{ db_user }}
+          SPRING_DATASOURCE_PASSWORD={{ db_pass }}
+      no_log: true
     - name: Remove the previous container
       command: "docker rm -f bankapp"
       ignore_errors: yes
     - name: Start the new container
       command: >
         docker run -d --name bankapp --restart unless-stopped
+        --env-file /opt/bankapp.env
         -p 8080:8080 {{ image_ref }}
     - name: Wait for the app to answer on 8080
       uri:

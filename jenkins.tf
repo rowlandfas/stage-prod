@@ -58,6 +58,15 @@ sudo chown -R jenkins:jenkins /var/lib/jenkins/plugins
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now jenkins
+
+# Docker engine + CLI - the pipeline runs `docker build` / `docker push` on this host
+sudo yum install -y yum-utils
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker jenkins
+sudo systemctl restart jenkins
+
 # Install trivy for container scanning
 RELEASE_VERSION=$(grep -Po '(?<=VERSION_ID=")[0-9]' /etc/os-release)
 cat << EOT | sudo tee -a /etc/yum.repos.d/trivy.repo
