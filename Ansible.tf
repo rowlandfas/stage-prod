@@ -131,8 +131,8 @@ cat <<EOT> /opt/docker/deploy-stage.yml
         -p 8080:8080 {{ image_ref }}
     - name: Wait for the app to answer on 8080
       uri:
-        url: "http://localhost:8080/login"
-        status_code: [200, 302, 401]
+        url: "http://localhost:8080/actuator/health"
+        status_code: [200]
       register: health
       retries: 15
       delay: 8
@@ -177,8 +177,8 @@ cat <<EOT> /opt/docker/deploy-prod.yml
         -p 8080:8080 {{ image_ref }}
     - name: Wait for the app to answer on 8080
       uri:
-        url: "http://localhost:8080/login"
-        status_code: [200, 302, 401]
+        url: "http://localhost:8080/actuator/health"
+        status_code: [200]
       register: health
       retries: 15
       delay: 8

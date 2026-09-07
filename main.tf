@@ -509,6 +509,10 @@ resource "aws_instance" "prod_Docker" {
   metadata_options {
     http_tokens = "required"
   }
+  # Docker images + build cache fill the default 10 GB in a few deploys.
+  root_block_device {
+    volume_size = var.docker_volume_size
+  }
   tags = {
     Name = "${local.name}-prod-docker"
   }
@@ -525,6 +529,10 @@ resource "aws_instance" "stage_Docker" {
   user_data                   = local.docker_user_data
   metadata_options {
     http_tokens = "required"
+  }
+  # Docker images + build cache fill the default 10 GB in a few deploys.
+  root_block_device {
+    volume_size = var.docker_volume_size
   }
   tags = {
     Name = "${local.name}-stage-docker"
@@ -544,6 +552,10 @@ resource "aws_instance" "Jenkins" {
   metadata_options {
     http_tokens = "required"
   }
+  # Jenkins workspace + local Docker image layers outgrow the default 10 GB fast.
+  root_block_device {
+    volume_size = var.jenkins_volume_size
+  }
   tags = {
     Name = "${local.name}-jenkins"
   }
@@ -560,6 +572,10 @@ resource "aws_instance" "nexus" {
   user_data                   = local.nexus_user_data
   metadata_options {
     http_tokens = "required"
+  }
+  # Blob store (Maven artifacts + Docker layers) outgrows the default 10 GB.
+  root_block_device {
+    volume_size = var.nexus_volume_size
   }
   tags = {
     Name = "${local.name}-nexus"
@@ -634,6 +650,16 @@ resource "aws_launch_template" "launch_config" {
   key_name      = aws_key_pair.key.id
 
   vpc_security_group_ids = [aws_security_group.docker-sg.id]
+
+  # The baked AMI still carries a 10 GB snapshot; override so scaled-out
+  # instances get the same room as prod_Docker.
+  block_device_mappings {
+    device_name = "/dev/sda1"
+    ebs {
+      volume_size = var.docker_volume_size
+      volume_type = "gp3"
+    }
+  }
 
   lifecycle {
     create_before_destroy = true
@@ -841,13 +867,8 @@ resource "aws_lb_target_group" "TG" {
 }
 
 # creating target group attachment
-resource "aws_lb_target_group_attachment" "TG-attach" {
-  target_group_arn = aws_lb_target_group.TG.arn
-  target_id        = aws_instance.stage_Docker.id
-  port             = var.dockerport
-}
-
-# creating target group attachment
+# NOTE: the prod target group holds prod_Docker (+ the ASG instances) only.
+# stage_Docker is deliberately NOT registered here - it is served by elb-stage.
 resource "aws_lb_target_group_attachment" "TG-attach2" {
   target_group_arn = aws_lb_target_group.TG.arn
   target_id        = aws_instance.prod_Docker.id
@@ -992,6 +1013,18 @@ resource "aws_route53_record" "prod-subdocker-record" {
 resource "aws_route53_record" "prod-docker-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.domain
+  type    = "A"
+  alias {
+    name                   = aws_lb.prod-docker-LB.dns_name
+    zone_id                = aws_lb.prod-docker-LB.zone_id
+    evaluate_target_health = true
+  }
+}
+
+#creating A prod record (prod.<domain> -> prod ALB, same target as the apex)
+resource "aws_route53_record" "prod-record" {
+  zone_id = data.aws_route53_zone.selfdevops.zone_id
+  name    = var.prod-domain
   type    = "A"
   alias {
     name                   = aws_lb.prod-docker-LB.dns_name

@@ -9,10 +9,9 @@ sudo yum install docker-ce -y
 sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -aG docker ec2-user   
-sudo mkdir /opt/docker
+sudo mkdir -p /opt/docker
 sudo chown -R ec2-user:ec2-user /opt/
-cd /opt
-sudo chmod 600 /opt/docker
+sudo chmod 700 /opt/docker
 curl -Ls https://download.newrelic.com/install/newrelic-cli/scripts/install.sh | bash && sudo NEW_RELIC_API_KEY=NRAK-EO270WP5BPKV1G0AMEZZI64U0HS NEW_RELIC_ACCOUNT_ID=5144160 NEW_RELIC_REGION=EU /usr/local/bin/newrelic install -y
 sudo hostnamectl set-hostname Docker
 EOF

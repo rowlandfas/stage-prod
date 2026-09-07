@@ -41,6 +41,18 @@ variable "ubuntu_ami" {
 variable "instance_type" {
   default = "t3.medium"
 }
+
+# Root volume sizes (GiB). Defaults match the sizes the boxes were manually
+# grown to; keep them here so `terraform apply` stops shrinking them back.
+variable "jenkins_volume_size" {
+  default = 50
+}
+variable "nexus_volume_size" {
+  default = 40
+}
+variable "docker_volume_size" {
+  default = 30
+}
 variable "cidr" {
   default = "10.0.0.0/16"
 }
@@ -85,4 +97,7 @@ variable "docker-domain" {
 }
 variable "stage-domain" {
   default = "stage.everythingops.io"
+}
+variable "prod-domain" {
+  default = "prod.everythingops.io"
 }

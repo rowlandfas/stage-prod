@@ -17,8 +17,9 @@ running in stage and prod.
 | CI/CD hosts (`t3.medium`, public subnets) | Jenkins, Nexus, SonarQube, Ansible control node, bastion |
 | App hosts (`t3.medium`, private subnets) | `stage_Docker`, `prod_Docker` |
 | Data | RDS MySQL 5.7 (`bankapp` db), Secrets Manager secret `mysql-secreet1` |
-| Load balancing | Classic ELBs for Jenkins / Nexus / Sonar / stage; ALB `prod-docker-LB` + target group `bankapp-TG` (:8080) for prod; ASG (min 1 / desired 2 / max 5) baked from `prod_Docker` |
-| DNS / TLS | ACM cert for `everythingops.io` + `*.everythingops.io`; Route53 A-records: `jenkins.`, `sonar.`, `nexus.`, `stage.`, `docker.`, apex |
+| Load balancing | Classic ELBs for Jenkins / Nexus / Sonar / stage; ALB `prod-docker-LB` + target group `bankapp-TG` (:8080, `prod_Docker` + ASG only) for prod; ASG (min 1 / desired 2 / max 5) baked from `prod_Docker` |
+| DNS / TLS | ACM cert for `everythingops.io` + `*.everythingops.io`; Route53 A-records: `jenkins.`, `sonar.`, `nexus.`, `stage.`, `docker.`, `prod.`, apex |
+| Root volumes | Jenkins 50 G, Nexus 40 G, `stage_Docker` / `prod_Docker` / ASG 30 G (`*_volume_size` vars) — the default 10 G fills within a few deploys |
 
 ### Pipeline flow (Jenkinsfile lives in the **bankapp app repo**, not here)
 
@@ -258,7 +259,7 @@ SSH: `ssh -i bankapp-key ec2-user@<jenkins-server>`
 The user-data already installed **Java 21**, Maven, Docker, Trivy and
 pre-installed the pipeline plugins (`config-file-provider`, `sonar`,
 `nexus-artifact-uploader`, `dependency-check`, `docker-workflow`, `ssh-agent`,
-`pipeline-utility-steps`, `htmlpublisher`, `slack`, …).
+`pipeline-utility-steps`, `htmlpublisher`, `slack`, `jacoco`, …).
 
 1. **Unlock** at `https://jenkins.everythingops.io` with
    `/var/lib/jenkins/secrets/initialAdminPassword`, choose **"Select plugins to
@@ -292,14 +293,39 @@ pre-installed the pipeline plugins (`config-file-provider`, `sonar`,
    - ID: **`nexus-maven-settings`** (matches the Jenkinsfile `MAVEN_SETTINGS`)
    - Content:
 
-   ```xml
-   <settings>
-     <servers>
-       <server><id>nexus</id><username>__NEXUS_USER__</username><password>__NEXUS_PASS__</password></server>
-     </servers>
-   </settings>
-   ```
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
 
+  <servers>
+    <server>
+      <id>nexus</id>
+      <username>admin</username>
+      <password>admin123</password>
+    </server>
+    <server>
+      <id>nexus-releases</id>
+      <username>admin</username>
+      <password>admin123</password>
+    </server>
+    <server>
+      <id>nexus-snapshots</id>
+      <username>admin</username>
+      <password>admin123</password>
+    </server>
+  </servers>
+
+  <mirrors>
+    <mirror>
+      <id>nexus</id>
+      <name>Nexus Public Mirror</name>
+      <url>https://nexus.everythingops.io/repository/maven-public/</url>
+      <mirrorOf>*</mirrorOf>
+    </mirror>
+  </mirrors>
+
+</settings>
    Use the "Server Credentials" mapping in the managed-file editor to bind
    `nexus` → `nexus-cred` instead of hard-coding the password.
 
@@ -334,7 +360,7 @@ Stage-by-stage expectation:
 | Build & Unit Test | `mvn clean verify`, jacoco + surefire output |
 | Publish JAR to Nexus | `distributionManagement` + `nexus` server creds |
 | Build Docker image | Docker on the Jenkins host (installed by user-data), `Dockerfile` at root |
-| Trivy scan | fails the build on `HIGH,CRITICAL` fixable vulns — tune `TRIVY_SEVERITY` |
+| Trivy scan | currently **report-only** (`--exit-code 0`) — flip back to `--exit-code 1` after bumping Spring Boot 3.3.4 → current, Tomcat and Jackson |
 | Push image to Nexus | `docker-hosted` repo + connector 8082 + token realm + `nexus-cred` |
 | Deploy to Stage | `ansible-key`, `ANSIBLE_HOST` reachable on 22, playbook renders `/opt/bankapp.env` and runs the container |
 | Approve production deployment | click **Deploy to prod** in the Jenkins UI (1-hour timeout) |
@@ -351,14 +377,17 @@ curl -kI https://stage.everythingops.io/
 # Prod (ALB → bankapp-TG → prod_Docker + ASG instances)
 curl -kI https://everythingops.io/
 curl -kI https://docker.everythingops.io/
+curl -kI https://prod.everythingops.io/
 
 # On a docker host (hop via bastion or ansible node — private subnets)
 ssh -i bankapp-key -J ec2-user@<baston-server> ec2-user@<prod-docker-server> \
   'docker ps && docker logs --tail 50 bankapp'
 ```
 
-The ALB target group health check accepts HTTP `200-399` (so the Spring Security
-`/` → `/login` redirect counts as healthy).
+The ALB target group health check accepts HTTP `200-399` on `/` (so the Spring
+Security `/` → `/login` redirect counts as healthy). The Ansible deploy
+playbooks gate on `GET /actuator/health` returning `200`, so the app must expose
+the Spring Boot Actuator health endpoint unauthenticated.
 
 New Relic: an APM app named **`bankapp`** and infra hosts should appear in the EU
 account baked into the user-data.
@@ -386,6 +415,7 @@ account baked into the user-data.
 | Jenkins won't start / wrong Java | `systemctl cat jenkins` should show the `java.conf` drop-in pointing at `/usr/lib/jvm/java-21-openjdk*/bin/java` |
 | `docker: command not found` in pipeline | user-data installs `docker-ce` after Jenkins and restarts it; on an old instance install Docker and `usermod -aG docker jenkins && systemctl restart jenkins` |
 | `docker push` → `x509` / `connection refused` on :8082 | Nexus docker connector not on 8082, token realm not enabled, or `var.nexusdockerport` ingress/listener not applied |
+| `systemctl start nexus` fails but `/app/nexus/bin/nexus start` works | old boxes: the unit had no `TimeoutStartSec` and a duplicate SysV init.d entry. Fix in place: `sudo rm -f /etc/init.d/nexus; sudo chkconfig --del nexus 2>/dev/null; ` then recreate `/etc/systemd/system/nexus.service` from `nexus.tf`, `sudo systemctl daemon-reload && sudo systemctl enable --now nexus` |
 | Quality Gate stage hangs then times out | Sonar webhook to `https://jenkins.everythingops.io/sonarqube-webhook/` not configured |
 | `mvn deploy` 401 | `nexus-maven-settings` server id ≠ pom `distributionManagement` id, or `nexus-cred` lacks write on the repo |
 | Deploy stage: `ssh: connect ... timed out` | `ANSIBLE_HOST` placeholder not replaced, or you used the private IP |
