@@ -38,3 +38,8 @@ terraform.rc
 
 .terraform.lock.hcl
 Jenkinsfile.txt
+
+# Generated SSH private key (local_file.key in main.tf)
+bankapp-key
+*.pem
+checkov_output.json

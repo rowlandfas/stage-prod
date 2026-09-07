@@ -24,5 +24,5 @@ output "baston-server" {
 }
 
 output "database-endpoint" {
-  value = aws_db_instance.pet-clinic-db.endpoint
+  value = aws_db_instance.bankapp-db.endpoint
 }

@@ -1,5 +1,5 @@
 variable "all-cidr" {
-  default = ["0.0.0.0/0"]
+  default = "0.0.0.0/0"
 }
 variable "httpport" {
   default = 80
@@ -14,7 +14,7 @@ variable "sonarport" {
   default = 9000
 }
 variable "dockerport" {
-  default = 8085
+  default = 8080
 }
 
 variable "jenkinsport" {
@@ -30,13 +30,13 @@ variable "mysqlport" {
   default = 3306
 }
 variable "redhat_ami" {
-  default = "ami-0c55b159cbfafe1f0"
+  default = "ami-0574a94188d1b84a1"
 }
 variable "ubuntu_ami" {
-  default = "ami-0dba2cb6798deb6d8"
+  default = "ami-09be70e689bddcef5"
 }
 variable "instance_type" {
-  default = "t2.micro"
+  default = "t3.medium"
 }
 variable "cidr" {
   default = "10.0.0.0/16"
@@ -57,10 +57,10 @@ variable "dbusername" {
   default = "admin"
 }
 variable "db-identifier" {
-  default = "mydb"
+  default = "bankapp-db"
 }
 variable "dbname" {
-  default = "mydatabase"
+  default = "bankapp"
 }
 variable "domain" {
   default = "everythingops.io"

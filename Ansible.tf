@@ -33,21 +33,17 @@ echo "${file(var.newrelicfile)}" >> /opt/docker/newrelic.yml
 touch /opt/docker/Dockerfile
 cat <<EOT>> /opt/docker/Dockerfile
 FROM eclipse-temurin:17-jre-jammy
-FROM ubuntu
-FROM tomcat
-COPY *.war /usr/local/tomcat/webapps
-WORKDIR /usr/local/tomcat/webapps
-RUN apt update -y && apt install curl -y
+WORKDIR /app
+COPY *.jar /app/bankapp.jar
+RUN apt-get update -y && apt-get install -y curl unzip
 RUN curl -O https://download.newrelic.com/newrelic/java-agent/newrelic-agent/current/newrelic-java.zip && \
-    apt-get install unzip -y  && \
-    unzip newrelic-java.zip -d  /usr/local/tomcat/webapps
-ENV JAVA_OPTS="$JAVA_OPTS -javaagent:/usr/local/tomcat/webapps/newrelic/newrelic.jar"
-ENV NEW_RELIC_APP_NAME="myapp"
+    unzip newrelic-java.zip -d /app
+ENV JAVA_OPTS="$JAVA_OPTS -javaagent:/app/newrelic/newrelic.jar"
+ENV NEW_RELIC_APP_NAME="bankapp"
 ENV NEW_RELIC_LOG_FILE_NAME=STDOUT
 ENV NEW_RELIC_LICENCE_KEY="4fe454560348c09a686f1ddf970f1af0FFFFNRAL"
-WORKDIR /usr/local/tomcat/webapps
-ADD ./newrelic.yml /usr/local/tomcat/webapps/newrelic/newrelic.yml
-ENTRYPOINT [ "java", "-javaagent:/usr/local/tomcat/webapps/newrelic/newrelic.jar", "-jar", "spring-petclinic-1.0.war", "--server.port=8080"]
+ADD ./newrelic.yml /app/newrelic/newrelic.yml
+ENTRYPOINT [ "java", "-javaagent:/app/newrelic/newrelic.jar", "-jar", "/app/bankapp.jar", "--server.port=8080"]
 EOT
 
 touch /opt/docker/docker-image.yml
@@ -58,32 +54,32 @@ cat <<EOT>> /opt/docker/docker-image.yml
    become: true
 
    tasks:
-    - name: Download WAR file from Nexus repository
+    - name: Download JAR file from Nexus repository
       get_url:
-        url: http://admin:admin123@${aws_instance.nexus.public_ip}:8081/repository/nexus-repo/Petclinic/spring-petclinic/1.0/spring-petclinic-1.0.war
-        
-        dest: /opt/docker/spring-petclinic-1.0.war
-        
-    - name: Build Docker image from WAR file
+        url: http://admin:admin123@${aws_instance.nexus.public_ip}:8081/repository/nexus-repo/Bankapp/bankapp/1.0/bankapp-1.0.jar
+
+        dest: /opt/docker/bankapp.jar
+
+    - name: Build Docker image from JAR file
       community.docker.docker_image:
         build:
           path: /opt/docker
-        name: cloudhight/testapp
+        name: cloudhight/bankapp
         tag: latest
-        source: build    
+        source: build
     - name: Login to Docker Hub
       community.docker.docker_login:
         username: cloudhight
-        password: Motiva123@    
+        password: Motiva123@
     - name: Push Docker image to Docker Hub
       community.docker.docker_image:
-        name: cloudhight/testapp
+        name: cloudhight/bankapp
         tag: latest
         push: yes
-        source: local    
+        source: local
     - name: Remove Docker image from Ansible server
       community.docker.docker_image:
-        name: cloudhight/testapp:latest
+        name: cloudhight/bankapp:latest
         state: absent
 EOT
 
@@ -99,29 +95,29 @@ cat <<EOT>> /opt/docker/docker-container.yml
         password: Motiva123@
     - name: Stop any container running
       docker_container:
-        name: testAppContainer
+        name: bankappContainer
         state: stopped
       ignore_errors: yes
     - name: Remove stopped container
       docker_container:
-        name: testAppContainer
+        name: bankappContainer
         state: absent
       ignore_errors: yes
     - name: Remove docker image
       docker_image:
         state: absent
-        name: cloudhight/testapp
+        name: cloudhight/bankapp
         tag: latest
       ignore_errors: yes
     - name: Pull docker image from Docker Hub
       docker_image:
-        name: cloudhight/testapp
+        name: cloudhight/bankapp
         tag: latest
         source: pull
-    - name: Create container from pet adoption image
+    - name: Create container from bankapp image
       docker_container:
-        name: testAppContainer
-        image: cloudhight/testapp
+        name: bankappContainer
+        image: cloudhight/bankapp
         state: started
         ports:
           - "8080:8080"

@@ -168,14 +168,14 @@ resource "tls_private_key" "key" {
 //creating private key
 resource "local_file" "key" {
   content         = tls_private_key.key.private_key_pem
-  filename        = "pet-key"
+  filename        = "bankapp-key"
   file_permission = "600"
   //depends_on      = [null_resource.pre_scan]
 }
 
 //creating public key
 resource "aws_key_pair" "key" {
-  key_name   = "pet-pub-key1"
+  key_name   = "bankapp-pub-key1"
   public_key = tls_private_key.key.public_key_openssh
 }
 
@@ -581,8 +581,8 @@ resource "aws_db_subnet_group" "database" {
   }
 }
 
-//creating RDS database 
-resource "aws_db_instance" "pet-clinic-db" {
+//creating RDS database
+resource "aws_db_instance" "bankapp-db" {
   identifier             = var.db-identifier
   db_subnet_group_name   = aws_db_subnet_group.database.name
   vpc_security_group_ids = [aws_security_group.rds-sg.id]
@@ -654,8 +654,7 @@ resource "aws_autoscaling_group" "asg_group" {
 # creating autoscaling policy
 resource "aws_autoscaling_policy" "autoscaling_grp-policy" {
   autoscaling_group_name = aws_autoscaling_group.asg_group.name
-  name                   = "$(local.name)-asg-policy"
-  adjustment_type        = "ChangeInCapacity"
+  name                   = "${local.name}-asg-policy"
   policy_type            = "TargetTrackingScaling"
   target_tracking_configuration {
     predefined_metric_specification {
@@ -801,7 +800,7 @@ resource "aws_elb" "elb-sonar1" {
 
 # creating target group
 resource "aws_lb_target_group" "TG" {
-  name     = "pet-TG"
+  name     = "bankapp-TG"
   port     = var.dockerport
   protocol = "HTTP"
   vpc_id   = aws_vpc.vpc.id
@@ -810,6 +809,7 @@ resource "aws_lb_target_group" "TG" {
     unhealthy_threshold = 5
     interval            = 60
     timeout             = 10
+    matcher             = "200-399"
   }
 }
 

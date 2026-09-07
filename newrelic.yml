@@ -4,7 +4,7 @@ common: &default_settings
   license_key: 'eu01xx8555b8148af8853844069791f4FFFFNRAL'
   agent_enabled: true
   # Set the name of your application as you’d like it show up in New Relic.
-  app_name: 'myapp'
+  app_name: 'bankapp'
   high_security: false
   enable_auto_app_naming: false
   enable_auto_transaction_naming: true
@@ -66,12 +66,12 @@ common: &default_settings
   labels:
 development:
   <<: *default_settings
-  app_name: Pet-Adoption (Development)
+  app_name: BankApp (Development)
 test:
   <<: *default_settings
-  app_name: Pet-Adoption (Test)
+  app_name: BankApp (Test)
 production:
   <<: *default_settings
 staging:
   <<: *default_settings
-  app_name: Pet-Adoption (Staging)
+  app_name: BankApp (Staging)
