@@ -896,6 +896,8 @@ resource "aws_route53_record" "jenkins-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.jenkins-domain
   type    = "A"
+  # zone is shared infra - take over any pre-existing record instead of failing
+  allow_overwrite = true
   alias {
     name                   = aws_elb.elb-jenkins1.dns_name
     zone_id                = aws_elb.elb-jenkins1.zone_id
@@ -907,6 +909,8 @@ resource "aws_route53_record" "sonar-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.sonar-domain
   type    = "A"
+  # zone is shared infra - take over any pre-existing record instead of failing
+  allow_overwrite = true
   alias {
     name                   = aws_elb.elb-sonar1.dns_name
     zone_id                = aws_elb.elb-sonar1.zone_id
@@ -918,6 +922,8 @@ resource "aws_route53_record" "nexus-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.nexus-domain
   type    = "A"
+  # zone is shared infra - take over any pre-existing record instead of failing
+  allow_overwrite = true
   alias {
     name                   = aws_elb.elb-nexus1.dns_name
     zone_id                = aws_elb.elb-nexus1.zone_id
@@ -931,6 +937,8 @@ resource "aws_route53_record" "stage-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.stage-domain
   type    = "A"
+  # zone is shared infra - take over any pre-existing record instead of failing
+  allow_overwrite = true
   alias {
     name                   = aws_elb.elb-stage.dns_name
     zone_id                = aws_elb.elb-stage.zone_id
@@ -943,6 +951,8 @@ resource "aws_route53_record" "prod-subdocker-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.docker-domain #create the same A record for selfdevops.sace
   type    = "A"
+  # zone is shared infra - take over any pre-existing record instead of failing
+  allow_overwrite = true
   alias {
     name                   = aws_lb.prod-docker-LB.dns_name
     zone_id                = aws_lb.prod-docker-LB.zone_id
@@ -955,6 +965,8 @@ resource "aws_route53_record" "prod-docker-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.domain
   type    = "A"
+  # zone is shared infra - take over any pre-existing record instead of failing
+  allow_overwrite = true
   alias {
     name                   = aws_lb.prod-docker-LB.dns_name
     zone_id                = aws_lb.prod-docker-LB.zone_id
@@ -967,6 +979,8 @@ resource "aws_route53_record" "prod-record" {
   zone_id = data.aws_route53_zone.selfdevops.zone_id
   name    = var.prod-domain
   type    = "A"
+  # zone is shared infra - take over any pre-existing record instead of failing
+  allow_overwrite = true
   alias {
     name                   = aws_lb.prod-docker-LB.dns_name
     zone_id                = aws_lb.prod-docker-LB.zone_id
