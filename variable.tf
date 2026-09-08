@@ -48,6 +48,12 @@ variable "sonar_instance_type" {
   default = "t3.large"
 }
 
+# Nexus wants ~2.7 GB heap + 2.7 GB direct memory by default; that does not fit
+# in a t3.medium (4 GB) and the JVM fails to start.
+variable "nexus_instance_type" {
+  default = "t3.large"
+}
+
 # Root volume sizes (GiB). Defaults match the sizes the boxes were manually
 # grown to; keep them here so `terraform apply` stops shrinking them back.
 variable "jenkins_volume_size" {

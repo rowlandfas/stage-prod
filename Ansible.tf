@@ -34,60 +34,7 @@ stage
 prod
 
 EOT
-sudo mkdir /opt/docker
-echo "${file(var.newrelicfile)}" >> /opt/docker/newrelic.yml
-touch /opt/docker/Dockerfile
-cat <<EOT>> /opt/docker/Dockerfile
-FROM eclipse-temurin:17-jre-jammy
-WORKDIR /app
-COPY *.jar /app/bankapp.jar
-RUN apt-get update -y && apt-get install -y curl unzip
-RUN curl -O https://download.newrelic.com/newrelic/java-agent/newrelic-agent/current/newrelic-java.zip && \
-    unzip newrelic-java.zip -d /app
-ENV JAVA_OPTS="$JAVA_OPTS -javaagent:/app/newrelic/newrelic.jar"
-ENV NEW_RELIC_APP_NAME="bankapp"
-ENV NEW_RELIC_LOG_FILE_NAME=STDOUT
-ENV NEW_RELIC_LICENCE_KEY="4fe454560348c09a686f1ddf970f1af0FFFFNRAL"
-ADD ./newrelic.yml /app/newrelic/newrelic.yml
-ENTRYPOINT [ "java", "-javaagent:/app/newrelic/newrelic.jar", "-jar", "/app/bankapp.jar", "--server.port=8080"]
-EOT
-
-touch /opt/docker/docker-image.yml
-cat <<EOT>> /opt/docker/docker-image.yml
-
----
- - hosts: localhost
-   become: true
-
-   tasks:
-    - name: Download JAR file from Nexus repository
-      get_url:
-        url: http://admin:admin123@${aws_instance.nexus.public_ip}:8081/repository/nexus-repo/Bankapp/bankapp/1.0/bankapp-1.0.jar
-
-        dest: /opt/docker/bankapp.jar
-
-    - name: Build Docker image from JAR file
-      community.docker.docker_image:
-        build:
-          path: /opt/docker
-        name: cloudhight/bankapp
-        tag: latest
-        source: build
-    - name: Login to Docker Hub
-      community.docker.docker_login:
-        username: cloudhight
-        password: Motiva123@
-    - name: Push Docker image to Docker Hub
-      community.docker.docker_image:
-        name: cloudhight/bankapp
-        tag: latest
-        push: yes
-        source: local
-    - name: Remove Docker image from Ansible server
-      community.docker.docker_image:
-        name: cloudhight/bankapp:latest
-        state: absent
-EOT
+sudo mkdir -p /opt/docker
 
 # deploy-stage.yml / deploy-prod.yml: pull the image the Jenkins pipeline pushed
 # to the Nexus Docker registry and (re)run the container. Jenkins passes

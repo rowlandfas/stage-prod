@@ -577,12 +577,13 @@ resource "aws_instance" "Jenkins" {
 # Creating Nexus server
 resource "aws_instance" "nexus" {
   ami                         = var.redhat_ami
-  instance_type               = var.instance_type
+  instance_type               = var.nexus_instance_type
   associate_public_ip_address = true
   vpc_security_group_ids      = [aws_security_group.nexus-sg.id]
   subnet_id                   = aws_subnet.pub_sub1.id
   key_name                    = aws_key_pair.key.id
   user_data                   = local.nexus_user_data
+  user_data_replace_on_change = true
   metadata_options {
     http_tokens = "required"
   }
