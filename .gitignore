@@ -37,13 +37,9 @@ override.tf.json
 terraform.rc
 
 .terraform.lock.hcl
-
-# Local variable overrides (may contain the app repo token, etc.)
-terraform.tfvars
-*.auto.tfvars
+Jenkinsfile.txt
 
 # Generated SSH private key (local_file.key in main.tf)
 bankapp-key
 *.pem
 checkov_output.json
-checkov_output.JSON

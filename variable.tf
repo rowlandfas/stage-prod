@@ -1,55 +1,6 @@
 variable "all-cidr" {
   default = "0.0.0.0/0"
 }
-
-variable "aws_profile" {
-  description = "AWS CLI profile used by the provider."
-  default     = "default"
-}
-
-variable "region" {
-  default = "eu-west-3"
-}
-
-# ---------------------------------------------------------------------------
-# bankapp application repo - the ONLY value you normally need to set.
-# Terraform pre-creates a Jenkins pipeline job pointing here (Script Path:
-# Jenkinsfile), so once apply finishes you just hit "Build Now".
-# Set it in terraform.tfvars (copy terraform.tfvars.example) or with -var.
-# ---------------------------------------------------------------------------
-variable "app_repo_url" {
-  description = "Git clone URL of the bankapp application repo (contains pom.xml + Jenkinsfile)."
-  default     = "https://github.com/CHANGE-ME/bankapp.git"
-}
-
-variable "app_repo_branch" {
-  default = "main"
-}
-
-# Optional: username/password credential for a PRIVATE app repo. Leave blank
-# for a public repo.
-variable "app_repo_user" {
-  default = ""
-}
-variable "app_repo_token" {
-  description = "PAT / password for app_repo_user (marked sensitive)."
-  default     = ""
-  sensitive   = true
-}
-
-# New Relic license/API keys used by the in-instance agents. Blank = skip the
-# New Relic install entirely (the boot scripts no-op it).
-variable "newrelic_license_key" {
-  default   = ""
-  sensitive = true
-}
-variable "newrelic_api_key" {
-  default   = ""
-  sensitive = true
-}
-variable "newrelic_account_id" {
-  default = ""
-}
 variable "httpport" {
   default = 80
 }
@@ -89,15 +40,6 @@ variable "ubuntu_ami" {
 }
 variable "instance_type" {
   default = "t3.medium"
-}
-
-# Nexus (blob store + on-box bootstrap) and SonarQube (Elasticsearch + Postgres)
-# are memory-hungry; give them more room than the rest.
-variable "nexus_instance_type" {
-  default = "t3.large"
-}
-variable "sonar_instance_type" {
-  default = "t3.large"
 }
 
 # Root volume sizes (GiB). Defaults match the sizes the boxes were manually
