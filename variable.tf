@@ -42,6 +42,12 @@ variable "instance_type" {
   default = "t3.medium"
 }
 
+# SonarQube runs Elasticsearch + a Compute Engine + web process alongside
+# PostgreSQL; t3.medium/4 GB is right at the edge for even a small project.
+variable "sonar_instance_type" {
+  default = "t3.large"
+}
+
 # Root volume sizes (GiB). Defaults match the sizes the boxes were manually
 # grown to; keep them here so `terraform apply` stops shrinking them back.
 variable "jenkins_volume_size" {
@@ -52,6 +58,9 @@ variable "nexus_volume_size" {
 }
 variable "docker_volume_size" {
   default = 30
+}
+variable "sonar_volume_size" {
+  default = 25
 }
 variable "cidr" {
   default = "10.0.0.0/16"

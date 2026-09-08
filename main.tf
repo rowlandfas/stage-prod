@@ -464,7 +464,7 @@ resource "aws_instance" "baston-server" {
 #creating sonarqube_server
 resource "aws_instance" "sonarqube_instance" {
   ami                         = var.ubuntu_ami
-  instance_type               = var.instance_type
+  instance_type               = var.sonar_instance_type
   key_name                    = aws_key_pair.key.id
   associate_public_ip_address = true
   vpc_security_group_ids      = [aws_security_group.sonarqube-sg.id]
@@ -472,6 +472,11 @@ resource "aws_instance" "sonarqube_instance" {
   user_data                   = local.sonarqube_user_data
   metadata_options {
     http_tokens = "required"
+  }
+  # SonarQube bundles Elasticsearch, which goes read-only near a full disk; the
+  # ~8 GB AMI default fills with ES/PG data + the installer zip.
+  root_block_device {
+    volume_size = var.sonar_volume_size
   }
   tags = {
     Name = "SonarQube Instance"

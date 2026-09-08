@@ -14,12 +14,12 @@ running in stage and prod.
 | Layer | Resources |
 |---|---|
 | Network | 1 VPC (`10.0.0.0/16`), 2 public + 2 private subnets, IGW, 1 NAT gateway, route tables |
-| CI/CD hosts (`t3.medium`, public subnets) | Jenkins, Nexus, SonarQube, Ansible control node, bastion |
+| CI/CD hosts (public subnets) | Jenkins, Nexus, Ansible control node, bastion (`t3.medium`); SonarQube (`t3.large` — ES + CE + web + Postgres) |
 | App hosts (`t3.medium`, private subnets) | `stage_Docker`, `prod_Docker` |
 | Data | RDS MySQL 5.7 (`bankapp` db), Secrets Manager secret `mysql-secreet1` |
 | Load balancing | Classic ELBs for Jenkins / Nexus / Sonar / stage; ALB `prod-docker-LB` + target group `bankapp-TG` (:8080, `prod_Docker` + ASG only) for prod; ASG (min 1 / desired 2 / max 5) baked from `prod_Docker` |
 | DNS / TLS | ACM cert for `everythingops.io` + `*.everythingops.io`; Route53 A-records: `jenkins.`, `sonar.`, `nexus.`, `stage.`, `docker.`, `prod.`, apex |
-| Root volumes | Jenkins 50 G, Nexus 40 G, `stage_Docker` / `prod_Docker` / ASG 30 G (`*_volume_size` vars) — the default 10 G fills within a few deploys |
+| Root volumes | Jenkins 50 G, Nexus 40 G, SonarQube 25 G, `stage_Docker` / `prod_Docker` / ASG 30 G (`*_volume_size` vars) — the AMI default (8–10 G) fills within a few deploys |
 
 ### Pipeline flow (Jenkinsfile lives in the **bankapp app repo**, not here)
 
