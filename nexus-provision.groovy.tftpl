@@ -1,0 +1,31 @@
+// bankapp Nexus provisioning - run once at boot via the Nexus scripting API.
+// Idempotent: safe to run again.
+import org.sonatype.nexus.security.realm.RealmManager
+
+// 1. Docker (hosted) repository on the dedicated HTTP connector port.
+if (repository.repositoryManager.get('docker-hosted') == null) {
+    repository.createDockerHosted('docker-hosted', ${nexus_docker_port}, null)
+    log.info('bankapp: created docker-hosted repository')
+}
+
+// 2. Also enable the Docker Bearer Token realm (basic auth works too).
+try {
+    container.lookup(RealmManager.class.name).enableRealm('DockerToken')
+} catch (Exception e) {
+    log.warn('bankapp: could not enable DockerToken realm: ' + e)
+}
+
+// 3. Set the admin password to the Terraform-generated value.
+security.securitySystem.changePassword('admin', '${nexus_admin_pass}')
+
+// 4. CI user used by the Jenkins pipeline (docker push + mvn deploy).
+def ss = security.securitySystem
+boolean ciExists = false
+try { ss.getUser('${nexus_ci_user}'); ciExists = true } catch (Exception ignored) { }
+if (ciExists) {
+    ss.changePassword('${nexus_ci_user}', '${nexus_ci_pass}')
+} else {
+    security.addUser('${nexus_ci_user}', 'CI', 'User', 'ci@bankapp.local', true,
+                     '${nexus_ci_pass}', ['nx-admin'])
+}
+log.info('bankapp: Nexus provisioning complete')

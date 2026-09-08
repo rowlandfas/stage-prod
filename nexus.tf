@@ -1,27 +1,36 @@
 locals {
+  nexus_version = "3.70.1-02"
+
+  nexus_provision_groovy = templatefile("${path.module}/nexus-provision.groovy.tftpl", {
+    nexus_docker_port = var.nexusdockerport
+    nexus_admin_pass  = random_password.nexus_admin.result
+    nexus_ci_user     = "ci"
+    nexus_ci_pass     = random_password.nexus_ci.result
+  })
+
   nexus_user_data = <<-EOF
 #!/bin/bash
+set -x
+exec > /var/log/bankapp-bootstrap.log 2>&1
+
 sudo yum update -y
-sudo yum install wget -y
-sudo yum install java-1.8.0-openjdk.x86_64 -y
-sudo mkdir /app && cd /app
-sudo wget http://download.sonatype.com/nexus/3/nexus-3.23.0-03-unix.tar.gz
-sudo tar -xvf nexus-3.23.0-03-unix.tar.gz
-sudo mv nexus-3.23.0-03 nexus
-sudo adduser nexus
-sudo mkdir -p /app/sonatype-work
+sudo yum install -y wget java-17-openjdk python3
+
+# --- install Nexus ${local.nexus_version} ---------------------------------
+sudo mkdir -p /app && cd /app
+sudo wget -q "https://download.sonatype.com/nexus/3/nexus-${local.nexus_version}-unix.tar.gz"
+sudo tar -xzf "nexus-${local.nexus_version}-unix.tar.gz"
+sudo mv "nexus-${local.nexus_version}" nexus
+sudo useradd nexus || true
+sudo mkdir -p /app/sonatype-work/nexus3/etc
+
+# allow the scripting API (needed for unattended provisioning; off by default)
+echo 'nexus.scripts.allowCreation=true' | sudo tee -a /app/sonatype-work/nexus3/etc/nexus.properties
+printf 'run_as_user="nexus"\n' | sudo tee /app/nexus/bin/nexus.rc
 sudo chown -R nexus:nexus /app/nexus /app/sonatype-work
-cat <<EOT | sudo tee /app/nexus/bin/nexus.rc
-run_as_user="nexus"
-EOT
 
-# Heap: keep well clear of the t3.medium 4 GiB (OS + JVM direct memory). Raise
-# these together with the instance size if Nexus needs more headroom.
-sed -i '2s/-Xms2703m/-Xms1024m/' /app/nexus/bin/nexus.vmoptions
-sed -i '3s/-Xmx2703m/-Xmx1024m/' /app/nexus/bin/nexus.vmoptions
-sed -i '4s/-XX:MaxDirectMemorySize=2703m/-XX:MaxDirectMemorySize=1024m/' /app/nexus/bin/nexus.vmoptions
-
-cat <<EOT | sudo tee /etc/systemd/system/nexus.service
+# --- systemd unit --------------------------------------------------------
+cat <<'UNIT' | sudo tee /etc/systemd/system/nexus.service
 [Unit]
 Description=nexus service
 After=network.target
@@ -34,16 +43,43 @@ ExecStop=/app/nexus/bin/nexus stop
 User=nexus
 Group=nexus
 Restart=on-abort
-# Nexus' first start takes minutes; the default 90s TimeoutStartSec makes
-# systemd kill it mid-boot, which is why it was "only restartable via bin/nexus".
+# Nexus' first start takes minutes; the default 90s TimeoutStartSec would make
+# systemd kill it mid-boot.
 TimeoutStartSec=600
+
 [Install]
 WantedBy=multi-user.target
-EOT
+UNIT
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now nexus
-curl -Ls https://download.newrelic.com/install/newrelic-cli/scripts/install.sh | bash && sudo NEW_RELIC_API_KEY=NRAK-EO270WP5BPKV1G0AMEZZI64U0HS NEW_RELIC_ACCOUNT_ID=5144160 NEW_RELIC_REGION=EU /usr/local/bin/newrelic install -y
+
+# --- unattended provisioning -------------------------------------------
+cat > /opt/nexus-provision.groovy <<'PROVISION'
+${local.nexus_provision_groovy}
+PROVISION
+
+# wait for the REST API to answer (up to ~10 min)
+for i in $(seq 1 60); do
+  curl -sf http://localhost:8081/service/rest/v1/status >/dev/null 2>&1 && break
+  sleep 10
+done
+
+INIT_PW=$(sudo cat /app/sonatype-work/nexus3/admin.password 2>/dev/null || echo "admin123")
+
+python3 -c "import json;print(json.dumps({'name':'bankapp-provision','type':'groovy','content':open('/opt/nexus-provision.groovy').read()}))" > /opt/nexus-provision.json
+
+# register + run the provisioning script (retry a few times while Nexus settles)
+for i in $(seq 1 12); do
+  curl -sf -u "admin:$INIT_PW" -H 'Content-Type: application/json' \
+       -X POST http://localhost:8081/service/rest/v1/script \
+       -d @/opt/nexus-provision.json && break
+  sleep 15
+done
+curl -sf -u "admin:$INIT_PW" -H 'Content-Type: text/plain' \
+     -X POST http://localhost:8081/service/rest/v1/script/bankapp-provision/run || true
+
+${local.nr_install}
 sudo hostnamectl set-hostname Nexus
 EOF
 }

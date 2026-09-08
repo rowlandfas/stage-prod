@@ -1,0 +1,135 @@
+# Jenkins Configuration as Code - rendered by Terraform, applied at every boot.
+# This is the single source of truth for Jenkins config. Do not hand-edit the
+# running controller; change Terraform and re-apply (Jenkins is replaced).
+jenkins:
+  systemMessage: "bankapp CI/CD - configured by JCasC."
+  numExecutors: 2
+  mode: NORMAL
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${jenkins_admin_pass}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "ANSIBLE_HOST"
+            value: "${ansible_host}"
+          - key: "RDS_ENDPOINT"
+            value: "${rds_endpoint}"
+          - key: "DB_NAME"
+            value: "${db_name}"
+          - key: "NEXUS_DOCKER_REGISTRY"
+            value: "${nexus_docker_registry}"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "nexus-cred"
+              username: "${nexus_ci_user}"
+              password: "${nexus_ci_pass}"
+              description: "Nexus CI user - docker push + maven deploy"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "bankapp-db"
+              username: "${db_user}"
+              password: "${db_pass}"
+              description: "bankapp RDS credentials"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "ansible-key"
+              username: "ec2-user"
+              description: "SSH key for ec2-user@ansible-server"
+              privateKeySource:
+                directEntry:
+                  privateKey: |
+                    ${indent(20, ssh_private_key)}
+          - string:
+              scope: GLOBAL
+              id: "sonar-token"
+              secret: "$${SONAR_TOKEN}"
+              description: "SonarQube analysis token - published via SSM by the sonar box"
+%{ if has_app_repo_cred ~}
+          - usernamePassword:
+              scope: GLOBAL
+              id: "app-repo-cred"
+              username: "${app_repo_user}"
+              password: "${app_repo_token}"
+              description: "bankapp app repo pull credentials"
+%{ endif ~}
+
+tool:
+  jdk:
+    installations:
+      - name: "java"
+        home: "$${JAVA_HOME_21}"
+  maven:
+    installations:
+      - name: "maven"
+        home: "/usr/share/maven"
+
+unclassified:
+  location:
+    url: "${jenkins_url}"
+  sonarGlobalConfiguration:
+    buildWrapperEnabled: true
+    installations:
+      - name: "sonarqube"
+        serverUrl: "${sonar_url}"
+        credentialsId: "sonar-token"
+  globalConfigFiles:
+    configs:
+      - mavenSettings:
+          id: "nexus-maven-settings"
+          name: "nexus-maven-settings"
+          comment: "Managed by JCasC"
+          isReplaceAll: true
+          serverCredentialMappings:
+            - credentialsId: "nexus-cred"
+              serverId: "nexus"
+            - credentialsId: "nexus-cred"
+              serverId: "nexus-releases"
+            - credentialsId: "nexus-cred"
+              serverId: "nexus-snapshots"
+          content: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+              <mirrors>
+                <mirror>
+                  <id>nexus</id>
+                  <name>nexus</name>
+                  <url>https://${nexus_host}/repository/maven-public/</url>
+                  <mirrorOf>*</mirrorOf>
+                </mirror>
+              </mirrors>
+            </settings>
+
+jobs:
+  - script: |
+      pipelineJob('bankapp') {
+        description('bankapp CI/CD - managed by Terraform / JCasC. Logic lives in the app repo Jenkinsfile.')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('${app_repo_url}')
+%{ if has_app_repo_cred ~}
+                  credentials('app-repo-cred')
+%{ endif ~}
+                }
+                branch('*/${app_repo_branch}')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(true)
+          }
+        }
+      }

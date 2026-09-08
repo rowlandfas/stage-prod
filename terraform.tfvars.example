@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and edit. The only value you normally need is the
+# bankapp application repo.
+
+app_repo_url    = "https://github.com/your-org/bankapp.git"
+app_repo_branch = "main"
+
+# For a PRIVATE app repo, also set these (a GitHub PAT with repo:read is fine):
+# app_repo_user  = "your-github-user"
+# app_repo_token = "ghp_xxx"
+
+# Optional - enable the New Relic infra agent on every box (off by default):
+# newrelic_license_key = "eu01xx...NRAL"
+# newrelic_api_key     = "NRAK-..."
+# newrelic_account_id  = "1234567"
+
+# Optional overrides:
+# region              = "eu-west-3"
+# aws_profile         = "default"
+# domain              = "everythingops.io"
+# nexus_instance_type = "t3.large"
+# sonar_instance_type = "t3.large"
