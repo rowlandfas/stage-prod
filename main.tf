@@ -456,7 +456,8 @@ resource "aws_instance" "baston-server" {
   EOF
 
   tags = {
-    name = "${local.name}-baston"
+    Name = "${local.name}-bastion"
+    Role = "bastion"
   }
 }
 
@@ -479,7 +480,8 @@ resource "aws_instance" "sonarqube_instance" {
     volume_size = var.sonar_volume_size
   }
   tags = {
-    Name = "SonarQube Instance"
+    Name = "${local.name}-sonarqube"
+    Role = "sonarqube"
   }
 }
 
@@ -498,7 +500,8 @@ resource "aws_instance" "ansible-server" {
     http_tokens = "required"
   }
   tags = {
-    Name = "${local.name}-ansible-server"
+    Name = "${local.name}-ansible"
+    Role = "ansible-control"
   }
 }
 
@@ -519,7 +522,9 @@ resource "aws_instance" "prod_Docker" {
     volume_size = var.docker_volume_size
   }
   tags = {
-    Name = "${local.name}-prod-docker"
+    Name        = "${local.name}-prod-docker"
+    Role        = "app-host"
+    Environment = "prod"
   }
 }
 
@@ -540,7 +545,9 @@ resource "aws_instance" "stage_Docker" {
     volume_size = var.docker_volume_size
   }
   tags = {
-    Name = "${local.name}-stage-docker"
+    Name        = "${local.name}-stage-docker"
+    Role        = "app-host"
+    Environment = "stage"
   }
 }
 
@@ -563,6 +570,7 @@ resource "aws_instance" "Jenkins" {
   }
   tags = {
     Name = "${local.name}-jenkins"
+    Role = "jenkins"
   }
 }
 
@@ -584,6 +592,7 @@ resource "aws_instance" "nexus" {
   }
   tags = {
     Name = "${local.name}-nexus"
+    Role = "nexus"
   }
 }
 
