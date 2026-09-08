@@ -98,6 +98,7 @@ cat <<EOT> /opt/docker/deploy-stage.yml
 ---
  - hosts: stage
    become: true
+   gather_facts: false
    vars:
      registry: "{{ registry | default('nexus.everythingops.io:8082') }}"
      image_ref: "{{ image_ref | default(registry + '/bankapp:latest') }}"
@@ -108,7 +109,9 @@ cat <<EOT> /opt/docker/deploy-stage.yml
      db_pass: "{{ db_pass | default('') }}"
    tasks:
     - name: Log in to the Nexus Docker registry
-      command: "docker login {{ registry }} -u {{ nexus_user }} -p {{ nexus_pass }}"
+      command: "docker login {{ registry }} -u {{ nexus_user }} --password-stdin"
+      args:
+        stdin: "{{ nexus_pass }}"
       no_log: true
     - name: Pull the application image
       command: "docker pull {{ image_ref }}"
@@ -129,7 +132,7 @@ cat <<EOT> /opt/docker/deploy-stage.yml
         docker run -d --name bankapp --restart unless-stopped
         --env-file /opt/bankapp.env
         -p 8080:8080 {{ image_ref }}
-    - name: Wait for the app to answer on 8080
+    - name: Wait for the app to be healthy
       uri:
         url: "http://localhost:8080/actuator/health"
         status_code: [200]
@@ -137,6 +140,8 @@ cat <<EOT> /opt/docker/deploy-stage.yml
       retries: 15
       delay: 8
       until: health is success
+    - name: Prune unused images to bound disk usage
+      command: "docker image prune -af"
 EOT
 
 touch /opt/docker/deploy-prod.yml
@@ -144,6 +149,7 @@ cat <<EOT> /opt/docker/deploy-prod.yml
 ---
  - hosts: prod
    become: true
+   gather_facts: false
    vars:
      registry: "{{ registry | default('nexus.everythingops.io:8082') }}"
      image_ref: "{{ image_ref | default(registry + '/bankapp:latest') }}"
@@ -154,7 +160,9 @@ cat <<EOT> /opt/docker/deploy-prod.yml
      db_pass: "{{ db_pass | default('') }}"
    tasks:
     - name: Log in to the Nexus Docker registry
-      command: "docker login {{ registry }} -u {{ nexus_user }} -p {{ nexus_pass }}"
+      command: "docker login {{ registry }} -u {{ nexus_user }} --password-stdin"
+      args:
+        stdin: "{{ nexus_pass }}"
       no_log: true
     - name: Pull the application image
       command: "docker pull {{ image_ref }}"
@@ -175,7 +183,7 @@ cat <<EOT> /opt/docker/deploy-prod.yml
         docker run -d --name bankapp --restart unless-stopped
         --env-file /opt/bankapp.env
         -p 8080:8080 {{ image_ref }}
-    - name: Wait for the app to answer on 8080
+    - name: Wait for the app to be healthy
       uri:
         url: "http://localhost:8080/actuator/health"
         status_code: [200]
@@ -183,6 +191,8 @@ cat <<EOT> /opt/docker/deploy-prod.yml
       retries: 15
       delay: 8
       until: health is success
+    - name: Prune unused images to bound disk usage
+      command: "docker image prune -af"
 EOT
 
 touch /opt/docker/newrelic-container.yml
