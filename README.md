@@ -16,10 +16,10 @@ running in stage and prod.
 | Network | 1 VPC (`10.0.0.0/16`), 2 public + 2 private subnets, IGW, 1 NAT gateway, route tables |
 | CI/CD hosts (public subnets) | Jenkins, Nexus, Ansible control node, bastion (`t3.medium`); SonarQube (`t3.large` — ES + CE + web + Postgres) |
 | App hosts (`t3.medium`, private subnets) | `stage_Docker`, `prod_Docker` |
-| Data | RDS MySQL 5.7 (`bankapp` db), Secrets Manager secret `mysql-secreet1` |
-| Load balancing | Classic ELBs for Jenkins / Nexus / Sonar / stage; ALB `prod-docker-LB` + target group `bankapp-TG` (:8080, `prod_Docker` + ASG only) for prod; ASG (min 1 / desired 2 / max 5) baked from `prod_Docker` |
+| Data | RDS MySQL 8.0 (`bankapp` db), Secrets Manager secret `mysql-secreet1` |
+| Load balancing | Classic ELBs for Jenkins / Nexus / Sonar / stage; ALB `prod-docker-LB` + target group `bankapp-TG` (:8080, health check `/actuator/health`) → `prod_Docker` |
 | DNS / TLS | ACM cert for `everythingops.io` + `*.everythingops.io`; Route53 A-records: `jenkins.`, `sonar.`, `nexus.`, `stage.`, `docker.`, `prod.`, apex |
-| Root volumes | Jenkins 50 G, Nexus 40 G, SonarQube 25 G, `stage_Docker` / `prod_Docker` / ASG 30 G (`*_volume_size` vars) — the AMI default (8–10 G) fills within a few deploys |
+| Root volumes | Jenkins 50 G, Nexus 40 G, SonarQube 25 G, `stage_Docker` / `prod_Docker` 30 G (`*_volume_size` vars) — the AMI default (8–10 G) fills within a few deploys |
 
 ### Pipeline flow (Jenkinsfile lives in the **bankapp app repo**, not here)
 
@@ -68,8 +68,7 @@ terraform plan -out tf.plan      # review: ~60 resources to add
 terraform apply tf.plan
 ```
 
-Expect **15–25 min** (a forced 6-min `time_sleep.ami-sleep`, ~5 min RDS, ~6 min
-AMI bake). When it finishes:
+Expect **12–18 min** (~8 min RDS is the long pole). When it finishes:
 
 ```bash
 terraform output
@@ -374,7 +373,7 @@ Stage-by-stage expectation:
 # Stage (classic ELB → stage_Docker:8080)
 curl -kI https://stage.everythingops.io/
 
-# Prod (ALB → bankapp-TG → prod_Docker + ASG instances)
+# Prod (ALB → bankapp-TG → prod_Docker)
 curl -kI https://everythingops.io/
 curl -kI https://docker.everythingops.io/
 curl -kI https://prod.everythingops.io/
@@ -430,7 +429,7 @@ account baked into the user-data.
 terraform destroy
 ```
 
-`skip_final_snapshot = true` on the RDS instance and `force_delete = true` on the
-ASG, so destroy is clean. The ACM cert + Route53 validation records are removed
-too; the `everythingops.io` hosted zone itself is **not** managed here and stays.
+`skip_final_snapshot = true` on the RDS instance, so destroy is clean. The ACM
+cert + Route53 validation records are removed too; the `everythingops.io` hosted
+zone itself is **not** managed here and stays.
 Delete the local `bankapp-key` afterwards.

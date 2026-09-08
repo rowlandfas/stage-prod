@@ -620,97 +620,24 @@ resource "aws_db_instance" "bankapp-db" {
   identifier             = var.db-identifier
   db_subnet_group_name   = aws_db_subnet_group.database.name
   vpc_security_group_ids = [aws_security_group.rds-sg.id]
-  allocated_storage      = 10
+  allocated_storage      = 20
   db_name                = var.dbname
   engine                 = "mysql"
-  engine_version         = "5.7"
+  engine_version         = "8.0"
   instance_class         = "db.t3.micro"
   username               = var.dbusername
   password               = aws_secretsmanager_secret_version.dbase-secret.secret_string
-  parameter_group_name   = "default.mysql5.7"
+  parameter_group_name   = "default.mysql8.0"
   skip_final_snapshot    = true
   publicly_accessible    = false
   storage_type           = "gp2"
 }
 
-//Creating AMI 
-resource "aws_ami_from_instance" "asg_ami" {
-  name                    = "asg-ami"
-  source_instance_id      = aws_instance.prod_Docker.id
-  snapshot_without_reboot = true
-  depends_on              = [aws_instance.prod_Docker, time_sleep.ami-sleep]
-}
-
-//Creating time sleep 
-resource "time_sleep" "ami-sleep" {
-  depends_on      = [aws_instance.prod_Docker]
-  create_duration = "360s"
-}
-
-//creating launch template 
-resource "aws_launch_template" "launch_config" {
-  name          = "asg-config"
-  image_id      = aws_ami_from_instance.asg_ami.id
-  instance_type = var.instance_type
-  key_name      = aws_key_pair.key.id
-
-  vpc_security_group_ids = [aws_security_group.docker-sg.id]
-
-  # The baked AMI still carries a 10 GB snapshot; override so scaled-out
-  # instances get the same room as prod_Docker.
-  block_device_mappings {
-    device_name = "/dev/sda1"
-    ebs {
-      volume_size = var.docker_volume_size
-      volume_type = "gp3"
-    }
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-
-//Creating Auto scaling group 
-resource "aws_autoscaling_group" "asg_group" {
-  name                      = "${local.name}- asg"
-  max_size                  = 5
-  min_size                  = 1
-  health_check_grace_period = 30
-  health_check_type         = "EC2"
-  desired_capacity          = 2
-  force_delete              = true
-  launch_template {
-    id      = aws_launch_template.launch_config.id
-    version = "$Latest"
-  }
-  vpc_zone_identifier = [aws_subnet.pub_sub1.id, aws_subnet.pub_sub2.id]
-  target_group_arns   = [aws_lb_target_group.TG.arn]
-  tag {
-    key                 = "name"
-    value               = "ASG"
-    propagate_at_launch = true
-  }
-
-  # desired_capacity is owned by the target-tracking policy at runtime
-  lifecycle {
-    ignore_changes = [desired_capacity]
-  }
-}
-
-# creating autoscaling policy
-resource "aws_autoscaling_policy" "autoscaling_grp-policy" {
-  autoscaling_group_name = aws_autoscaling_group.asg_group.name
-  name                   = "${local.name}-asg-policy"
-  policy_type            = "TargetTrackingScaling"
-  target_tracking_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ASGAverageCPUUtilization"
-    }
-    target_value = 50.0
-  }
-}
+# NOTE: prod runs as a single Docker host (aws_instance.prod_Docker) behind the
+# ALB, mirroring stage. The old ASG baked an AMI from prod_Docker BEFORE any app
+# was deployed, so its instances came up with no bankapp container and sat
+# permanently unhealthy in bankapp-TG (plus a forced 6-min time_sleep on every
+# apply). Removed.
 #creating Jenkins elb
 resource "aws_elb" "elb-jenkins1" {
   name            = "elb-jenkins1"
@@ -863,6 +790,7 @@ resource "aws_lb_target_group" "TG" {
   protocol = "HTTP"
   vpc_id   = aws_vpc.vpc.id
   health_check {
+    path                = "/actuator/health"
     healthy_threshold   = 3
     unhealthy_threshold = 5
     interval            = 60
@@ -872,8 +800,7 @@ resource "aws_lb_target_group" "TG" {
 }
 
 # creating target group attachment
-# NOTE: the prod target group holds prod_Docker (+ the ASG instances) only.
-# stage_Docker is deliberately NOT registered here - it is served by elb-stage.
+# Prod target group holds prod_Docker only; stage_Docker is served by elb-stage.
 resource "aws_lb_target_group_attachment" "TG-attach2" {
   target_group_arn = aws_lb_target_group.TG.arn
   target_id        = aws_instance.prod_Docker.id
